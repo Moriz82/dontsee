@@ -10,78 +10,75 @@ namespace Wubalubadubdub_Server
 {
     class Program
     {
-        private static readonly Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        private static readonly List<Socket> clientSockets = new List<Socket>();
-        private const int BUFFER_SIZE = 2048;
+        private static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        private static List<Socket> clients = new List<Socket>();
+        private const int bufferSize = 2048;
         private const int PORT = 6969;
-        private static readonly byte[] buffer = new byte[BUFFER_SIZE];
+        private static byte[] buffer = new byte[bufferSize];
 
         static void Main()
         {
             Console.Title = "Server";
             SetupServer();
-            Console.ReadLine(); // When we press enter close everything
+            while (!Console.ReadLine().ToLower().Equals("exit")) {}
             CloseAllSockets();
         }
 
         private static void SetupServer()
         {
-            Console.WriteLine("Setting up server...");
+            Console.WriteLine("Starting Server.");
             serverSocket.Bind(new IPEndPoint(IPAddress.Any, PORT));
+            Console.WriteLine("Starting Server..");
             serverSocket.Listen(0);
+            Console.WriteLine("Starting Server...");
             serverSocket.BeginAccept(AcceptCallback, null);
             Console.WriteLine("Server setup complete");
         }
-
-        /// <summary>
-        /// Close all connected client (we do not need to shutdown the server socket as its connections
-        /// are already closed with the clients).
-        /// </summary>
+        
         private static void CloseAllSockets()
         {
-            foreach (Socket socket in clientSockets)
+            foreach (Socket socket in clients)
             {
                 socket.Shutdown(SocketShutdown.Both);
                 socket.Close();
             }
-
             serverSocket.Close();
         }
 
-        private static void AcceptCallback(IAsyncResult AR)
+        private static void AcceptCallback(IAsyncResult asyncResult)
         {
             Socket socket;
 
             try
             {
-                socket = serverSocket.EndAccept(AR);
+                socket = serverSocket.EndAccept(asyncResult);
             }
             catch (ObjectDisposedException) // I cannot seem to avoid this (on exit when properly closing sockets)
             {
                 return;
-            }
-
-           clientSockets.Add(socket);
-           socket.BeginReceive(buffer, 0, BUFFER_SIZE, SocketFlags.None, ReceiveCallback, socket);
+            } 
+            
+            clients.Add(socket);
+           socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
            Console.WriteLine("Client connected, waiting for request...");
            serverSocket.BeginAccept(AcceptCallback, null);
         }
 
-        private static void ReceiveCallback(IAsyncResult AR)
+        private static void ReceiveCallback(IAsyncResult asyncResult)
         {
-            Socket current = (Socket)AR.AsyncState;
-            int received;
+            Socket socket = (Socket)asyncResult.AsyncState;
+            int received = 0;
 
             try
             {
-                received = current.EndReceive(AR);
+                received = socket.EndReceive(asyncResult);
             }
             catch (SocketException)
             {
                 Console.WriteLine("Client forcefully disconnected");
                 // Don't shutdown because the socket may be disposed and its disconnected anyway.
-                current.Close(); 
-                clientSockets.Remove(current);
+                socket.Close(); 
+                clients.Remove(socket);
                 return;
             }
 
@@ -90,19 +87,19 @@ namespace Wubalubadubdub_Server
             string text = Encoding.ASCII.GetString(recBuf);
             Console.WriteLine("Received Text: " + text);
 
-            if (text.ToLower() == "get time") // Client requested time
+            if (text.ToLower() == "get time")
             {
                 Console.WriteLine("Text is a get time request");
                 byte[] data = Encoding.ASCII.GetBytes(DateTime.Now.ToLongTimeString());
-                current.Send(data);
+                socket.Send(data);
                 Console.WriteLine("Time sent to client");
             }
             else if (text.ToLower() == "exit") // Client wants to exit gracefully
             {
                 // Always Shutdown before closing
-                current.Shutdown(SocketShutdown.Both);
-                current.Close();
-                clientSockets.Remove(current);
+                socket.Shutdown(SocketShutdown.Both);
+                socket.Close();
+                clients.Remove(socket);
                 Console.WriteLine("Client disconnected");
                 return;
             }
@@ -110,11 +107,11 @@ namespace Wubalubadubdub_Server
             {
                 Console.WriteLine("Text is an invalid request");
                 byte[] data = Encoding.ASCII.GetBytes("Invalid request");
-                current.Send(data);
+                socket.Send(data);
                 Console.WriteLine("Warning Sent");
             }
 
-            current.BeginReceive(buffer, 0, BUFFER_SIZE, SocketFlags.None, ReceiveCallback, current);
+            socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
         }
     }
 }

